@@ -24,7 +24,7 @@ jobs:
           TG_CHAT: ${{ secrets.TG_CHAT }}
           TEST: ${{ github.event.inputs.prueba }}
           TF: 15min
-          PAIRS: NZD/USD,USD/CHF,EUR/GBP,USD/CAD,AUD/USD,EUR/USD,GBP/JPY,EUR/JPY,USD/JPY,GBP/CHF
+          PAIRS: NZD/USD,USD/CHF,EUR/GBP,USD/CAD,AUD/USD,EUR/USD,GBP/JPY,EUR/JPY,USD/JPY,GBP/CHF,XAU/USD
       - run: |
           git config user.name robot
           git config user.email robot@users.noreply.github.com
