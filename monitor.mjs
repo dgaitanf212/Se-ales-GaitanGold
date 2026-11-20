@@ -62,6 +62,20 @@ function analyze(c,sym,ms,minSc){
 
 
 if(process.env.TEST==='si')await send('✅ Conexión OK: el robot de señales puede escribirte.');
+const RR=x=>(x>=0?'+':'')+x.toFixed(2)+'R';
+const COT=new Date(Date.now()-5*36e5),hCOT=COT.getUTCHours(),dCOT=COT.toISOString().slice(0,10),SH=+(process.env.SUMMARY_HOUR||18),RISK=+(process.env.RISK_USD||0);
+const usd=x=>RISK>0?` (${x>=0?'+':'−'}$${Math.abs(x*RISK).toFixed(2)})`:'';
+for(const k of Object.keys(st)){if(k.startsWith('T|')&&+k.split('|')[2]<Date.now()-5*864e5)delete st[k];else if(k.startsWith('L|')&&st[k].ct<Date.now()-14*864e5)delete st[k]}
+function resumen(){
+ const L=Object.keys(st).filter(k=>k.startsWith('L|')&&!st[k].d).map(k=>st[k]).sort((a,b)=>a.ct-b.ct);
+ const W=L.filter(x=>x.st==='tp'),P=L.filter(x=>x.st==='sl'),B=L.filter(x=>x.st==='be'),sum=a=>a.reduce((p,x)=>p+x.r,0);
+ const ab=Object.keys(st).filter(k=>k.startsWith('T|')&&String(st[k]).startsWith('open')).map(k=>k.slice(2).split('|')[0]);
+ let m=`📊 RESUMEN\nCerradas desde el último resumen: ${L.length}\n✅ Ganadas: ${W.length} · ❌ Perdidas: ${P.length} · ➖ Break even: ${B.length}\nResultado total: ${RR(sum(L))}${usd(sum(L))}`;
+ if(W.length)m+=`\nPromedio ganada: ${RR(sum(W)/W.length)}`;
+ if(P.length)m+=`\nPromedio perdida: ${RR(sum(P)/P.length)}`;
+ if(L.length)m+='\n\n'+L.map(x=>`${x.st==='tp'?'✅':x.st==='sl'?'❌':'➖'} ${x.s} ${x.dir>0?'▲':'▼'} ${RR(x.r)}`).join('\n');
+ return m+`\n\nAbiertas ahora: ${ab.length?ab.join(', '):'ninguna'}`;
+}
 for(const [i,s] of PAIRS.entries()){
  try{
   const j=await (await fetch(`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(s)}&interval=${TF}&outputsize=500&timezone=UTC&order=asc&apikey=${KEY}`)).json();
@@ -69,10 +83,26 @@ for(const [i,s] of PAIRS.entries()){
   const c=j.values.map(v=>({t:Date.parse(v.datetime.replace(' ','T')+'Z'),o:+v.open,h:+v.high,l:+v.low,c:+v.close,v:+(v.volume||0)})).filter(x=>x.t+MS<=Date.now());
   const r=analyze(c,s,MS,MINSC),t=r.trades.find(x=>x.k===r.last);
   if(t&&t.st==='open'&&r.ago<=1&&st[s]!==t.k){
-   st[s]=t.k;
-   await send(`★ NUEVA SEÑAL\n${t.dir>0?'▲ COMPRA':'▼ VENTA'} ${s}\nEjecutar en ${t.ex}\nEntrada ${fp(t.ent)}\nSL ${fp(t.sl0)}\nTP ${fp(t.tp)}\nRatio 1:${t.rr.toFixed(2)} · Score ${t.sc}\nSpread ${t.pp.toFixed(1)} pips\nVela cerrada ${ft(t.t)} (Colombia)`);
+   st[s]=t.k;st['T|'+t.k]='open';
+   await send(`★ NUEVA SEÑAL\n${t.dir>0?'▲ COMPRA':'▼ VENTA'} ${s}\nTemporalidad ${TF} · Ejecutar en ${t.ex}\nEntrada ${fp(t.ent)}\nSL ${fp(t.sl0)}\nTP ${fp(t.tp)}\nRatio 1:${t.rr.toFixed(2)} · Score ${t.sc}\nSpread ${t.pp.toFixed(1)} pips\nVela cerrada ${ft(t.t)} (Colombia)`);
+  }
+  const ak=st[s];if(ak&&!st['T|'+ak]&&r.trades.some(x=>x.k===ak))st['T|'+ak]='open';
+  for(const x of r.trades){
+   const key='T|'+x.k,prev=st[key];
+   if(!prev||prev==='tp'||prev==='sl'||prev==='be')continue;
+   const now=x.st==='open'?(x.be?'open+be':'open'):x.st;
+   if(now===prev)continue;
+   st[key]=now;
+   if(now==='tp'||now==='sl'||now==='be')st['L|'+x.k]={s,dir:x.dir,st:now,r:x.r,ct:x.ct,d:0};
+   const hd=`${x.dir>0?'▲ COMPRA':'▼ VENTA'} ${s} · entrada ${fp(x.ent)}`;
+   if(now==='open+be')await send(`🔒 MOVER SL A BREAK EVEN\n${hd}\nEl precio ya avanzó +${S.be}R a tu favor.\nSube el SL a ${fp(x.ent)}.`);
+   else if(now==='tp')await send(`✅ GANADA (TP)\n${hd}\nTP ${fp(x.tp)} alcanzado\nResultado ≈ ${RR(x.r)}${usd(x.r)} (neto de spread)\nCierre de vela ${ft(x.ct)} (Colombia)`);
+   else if(now==='sl')await send(`❌ PERDIDA (SL)\n${hd}\nSL ${fp(x.sl0)} tocado\nResultado ≈ ${RR(x.r)}${usd(x.r)} (con spread)\nCierre de vela ${ft(x.ct)} (Colombia)`);
+   else if(now==='be')await send(`➖ CERRADA EN BREAK EVEN\n${hd}\nEl precio volvió a la entrada\nResultado ≈ ${RR(x.r)}${usd(x.r)} (solo el spread)\nCierre de vela ${ft(x.ct)} (Colombia)`);
   }
  }catch(e){console.log(s,e.message)}
  if(i<PAIRS.length-1)await new Promise(r=>setTimeout(r,7600));
 }
+if(process.env.TEST==='si')await send(resumen());
+if(hCOT>=SH&&st.sumDate!==dCOT){await send(resumen());for(const k of Object.keys(st))if(k.startsWith('L|'))st[k].d=1;st.sumDate=dCOT}
 fs.writeFileSync('state.json',JSON.stringify(st));
