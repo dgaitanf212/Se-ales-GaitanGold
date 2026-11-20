@@ -3,14 +3,14 @@ const S={be:+(process.env.BE||1)};
 const KEY=process.env.TD_KEY,TOK=process.env.TG_TOKEN,CHAT=process.env.TG_CHAT,TF=process.env.TF||'1h',MINSC=+(process.env.MIN_SCORE||30);
 const PAIRS=(process.env.PAIRS||'EUR/USD,GBP/USD,USD/JPY,USD/CHF,AUD/USD,USD/CAD,NZD/USD,EUR/JPY,GBP/JPY,EUR/GBP').split(',').map(x=>x.trim());
 const MS={'15min':9e5,'30min':18e5,'1h':36e5,'4h':144e5}[TF];
-const fp=x=>x.toFixed(x>=20?3:5);
+const fp=x=>x.toFixed(x>=1000?2:x>=20?3:5);
 const ft=t=>new Date(t).toLocaleString('es-CO',{timeZone:'America/Bogota',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
 let st={};try{st=JSON.parse(fs.readFileSync('state.json','utf8'))}catch{}
 async function send(text){const r=await fetch(`https://api.telegram.org/bot${TOK}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:CHAT,text})});if(!r.ok)console.log('Telegram:',await r.text())}
 function ema(a,n){const o=Array(a.length).fill(NaN);let s=0;for(let i=0;i<a.length;i++){if(i<n-1){s+=a[i];continue}if(i===n-1){s+=a[i];o[i]=s/n}else o[i]=o[i-1]+(a[i]-o[i-1])*2/(n+1)}return o}
 function atr(c,n=14){const o=Array(c.length).fill(NaN);let s=0;for(let i=0;i<c.length;i++){const tr=i?Math.max(c[i].h-c[i].l,Math.abs(c[i].h-c[i-1].c),Math.abs(c[i].l-c[i-1].c)):c[i].h-c[i].l;if(i<n-1){s+=tr;continue}if(i===n-1){s+=tr;o[i]=s/n}else o[i]=(o[i-1]*(n-1)+tr)/n}return o}
 const MAJ='EURUSD,USDJPY,GBPUSD,AUDUSD,USDCAD,USDCHF,NZDUSD',MIN='EURGBP,EURJPY,GBPJPY,EURCHF,EURAUD,EURCAD,EURNZD,GBPCHF,GBPAUD,GBPCAD,GBPNZD,AUDJPY,CADJPY,CHFJPY,NZDJPY,AUDCAD,AUDCHF,AUDNZD,CADCHF,NZDCAD,NZDCHF';
-const pipOf=s=>s.replace('/','').toUpperCase().includes('JPY')?.01:.0001;
+const pipOf=s=>{const k=s.replace('/','').toUpperCase();return k.includes('XAU')?.1:k.includes('JPY')?.01:.0001};
 function cost(sym,px){const k=sym.replace('/','').toUpperCase(),pip=pipOf(sym);return MAJ.includes(k)?1.5*pip:MIN.includes(k)?2.5*pip:px*.00015}
 
 /* ---------- Lógica del script + break even ---------- */
